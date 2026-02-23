@@ -4,17 +4,67 @@ import plotly.express as px
 
 st.set_page_config(page_title="Top 1000 YouTube Channels Dashboard", layout="wide")
 
-st.title("Top 1000 YouTube Channels Interactive Dashboard")
+st.title("📊 Top 1000 YouTube Channels Interactive Dashboard")
 
-# Upload CSV
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
-    st.sidebar.header("Filter")
+    # ทำชื่อคอลัมน์ให้เป็นมาตรฐาน
+    df.columns = df.columns.str.lower().str.strip()
 
-    # Filter Category
+    # เปลี่ยนชื่อคอลัมน์ให้ตรงกับ dataset
+    rename_map = {
+        "youtuber": "channel name",
+        "uploads": "video count",
+        "video views": "video views",
+        "subscribers": "subscribers",
+        "rank": "rank"
+    }
+
+    df = df.rename(columns=rename_map)
+
+    # แปลงตัวเลข
+    if "rank" in df.columns:
+        df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
+
+    if "subscribers" in df.columns:
+        df["subscribers"] = (
+            df["subscribers"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+        )
+        df["subscribers"] = pd.to_numeric(df["subscribers"], errors="coerce")
+
+    if "video views" in df.columns:
+        df["video views"] = (
+            df["video views"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+        )
+        df["video views"] = pd.to_numeric(df["video views"], errors="coerce")
+
+    if "video count" in df.columns:
+        df["video count"] = pd.to_numeric(df["video count"], errors="coerce")
+
+    st.sidebar.header("Filter Dashboard")
+
+    # Rank Filter
+    if "rank" in df.columns:
+        min_rank = int(df["rank"].min())
+        max_rank = int(df["rank"].max())
+
+        rank_range = st.sidebar.slider(
+            "Select Rank Range",
+            min_rank,
+            max_rank,
+            (1, 50)
+        )
+
+        df = df[(df["rank"] >= rank_range[0]) & (df["rank"] <= rank_range[1])]
+
+    # Category Filter
     if "category" in df.columns:
         category = st.sidebar.multiselect(
             "Select Category",
@@ -23,31 +73,21 @@ if uploaded_file is not None:
         if category:
             df = df[df["category"].isin(category)]
 
-    # Filter Rank
-    if "rank" in df.columns:
-        rank_range = st.sidebar.slider(
-            "Select Rank Range",
-            int(df["rank"].min()),
-            int(df["rank"].max()),
-            (1, 50)
-        )
-        df = df[(df["rank"] >= rank_range[0]) & (df["rank"] <= rank_range[1])]
-
     # KPI
     col1, col2, col3 = st.columns(3)
 
+    col1.metric("Total Channels", len(df))
+
     if "subscribers" in df.columns:
-        col1.metric("Total Subscribers", f"{df['subscribers'].sum():,}")
+        col2.metric("Total Subscribers", f"{int(df['subscribers'].sum()):,}")
 
     if "video views" in df.columns:
-        col2.metric("Total Views", f"{df['video views'].sum():,}")
-
-    col3.metric("Total Channels", len(df))
+        col3.metric("Total Views", f"{int(df['video views'].sum()):,}")
 
     st.divider()
 
-    # Chart 1 Top Channels
-    if "subscribers" in df.columns and "channel name" in df.columns:
+    # Top Channels
+    if "channel name" in df.columns and "subscribers" in df.columns:
         top10 = df.sort_values("subscribers", ascending=False).head(10)
 
         fig1 = px.bar(
@@ -59,36 +99,27 @@ if uploaded_file is not None:
         )
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Chart 2 Category
+    # Category Chart
     if "category" in df.columns:
-        cat_count = df["category"].value_counts().reset_index()
-        cat_count.columns = ["category", "count"]
+        cat = df["category"].value_counts().reset_index()
+        cat.columns = ["category", "count"]
 
-        fig2 = px.pie(
-            cat_count,
-            names="category",
-            values="count",
-            title="Channel Categories Distribution"
-        )
+        fig2 = px.pie(cat, names="category", values="count")
         st.plotly_chart(fig2, use_container_width=True)
 
-    # Chart 3 Subscribers vs Views
+    # Scatter Chart
     if "subscribers" in df.columns and "video views" in df.columns:
         fig3 = px.scatter(
             df,
             x="subscribers",
             y="video views",
             size="subscribers",
-            hover_name="channel name",
-            title="Subscribers vs Video Views"
+            hover_name="channel name"
         )
         st.plotly_chart(fig3, use_container_width=True)
 
-    st.divider()
-
-    # Full Data
     st.subheader("Full Dataset")
     st.dataframe(df)
 
 else:
-    st.info("Please upload the YouTube dataset CSV file.")
+    st.info("Please upload the dataset CSV file.")
